@@ -1,0 +1,264 @@
+### PlacementPortal API Testing
+### Use with REST Client extension in VS Code
+
+@baseUrl = http://localhost:5000/api/v1
+@token = 
+@resetToken = 
+@jobId = 
+@studentId = 
+
+###############################################
+# AUTHENTICATION ENDPOINTS
+###############################################
+
+### Register Student
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "password": "password123",
+  "role": "student"
+}
+
+### Register Company
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Tech Corp",
+  "email": "hr@techcorp.com",
+  "password": "password123",
+  "role": "company"
+}
+
+### Register Admin
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Admin User",
+  "email": "admin@pdms.com",
+  "password": "admin123",
+  "role": "admin"
+}
+
+### Login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "password123"
+}
+
+### Get Current User
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+### Forgot Password
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "john@example.com"
+}
+
+### Reset Password
+PUT {{baseUrl}}/auth/reset-password/{{resetToken}}
+Content-Type: application/json
+
+{
+  "password": "newpassword123"
+}
+
+###############################################
+# STUDENT ENDPOINTS
+###############################################
+
+### Get All Students (Admin Only)
+GET {{baseUrl}}/students
+Authorization: Bearer {{token}}
+
+### Get Student Profile
+GET {{baseUrl}}/students/me
+Authorization: Bearer {{token}}
+
+### Update Student Profile
+PUT {{baseUrl}}/students/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "rollNo": "CS2021001",
+  "branch": "Computer Science",
+  "cgpa": 8.5,
+  "skills": ["JavaScript", "React", "Node.js", "MongoDB"]
+}
+
+### Apply for Job
+POST {{baseUrl}}/students/apply/{{jobId}}
+Authorization: Bearer {{token}}
+
+### Upload Resume
+PUT {{baseUrl}}/students/resume
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="resume"; filename="resume.pdf"
+Content-Type: application/pdf
+
+< ./path/to/resume.pdf
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### Update Application Status (Company/Admin)
+PUT {{baseUrl}}/students/application/{{jobId}}/{{studentId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "shortlisted"
+}
+
+###############################################
+# JOB ENDPOINTS
+###############################################
+
+### Get All Jobs
+GET {{baseUrl}}/jobs
+
+### Get All Jobs with Search
+GET {{baseUrl}}/jobs?search=developer&status=open&page=1&limit=5
+
+### Get All Jobs with Filters
+GET {{baseUrl}}/jobs?location=Bangalore&sort=-createdAt
+
+### Get Single Job
+GET {{baseUrl}}/jobs/{{jobId}}
+
+### Create Job (Company/Admin)
+POST {{baseUrl}}/jobs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Software Developer",
+  "description": "Looking for talented developers with 2+ years experience in full-stack development",
+  "requirements": ["JavaScript", "React", "Node.js", "MongoDB"],
+  "location": "Bangalore",
+  "salary": "8-12 LPA",
+  "deadline": "2024-12-31T23:59:59.000Z",
+  "status": "open"
+}
+
+### Update Job (Company/Admin)
+PUT {{baseUrl}}/jobs/{{jobId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Senior Software Developer",
+  "description": "Updated description for senior role",
+  "requirements": ["JavaScript", "React", "Node.js", "MongoDB", "TypeScript"],
+  "location": "Bangalore",
+  "salary": "10-15 LPA",
+  "deadline": "2024-12-31T23:59:59.000Z",
+  "status": "open"
+}
+
+### Delete Job (Company/Admin)
+DELETE {{baseUrl}}/jobs/{{jobId}}
+Authorization: Bearer {{token}}
+
+### Get Job Applications (Company/Admin)
+GET {{baseUrl}}/jobs/{{jobId}}/applications
+Authorization: Bearer {{token}}
+
+###############################################
+# VALIDATION TESTS
+###############################################
+
+### Test Invalid Email
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "invalid-email",
+  "password": "password123"
+}
+
+### Test Short Password
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "test@example.com",
+  "password": "123"
+}
+
+### Test Invalid Role
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "test@example.com",
+  "password": "password123",
+  "role": "invalid_role"
+}
+
+### Test Invalid CGPA
+PUT {{baseUrl}}/students/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "cgpa": 15.5
+}
+
+### Test Invalid Job Deadline (Past Date)
+POST {{baseUrl}}/jobs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Test Job",
+  "description": "Test description",
+  "requirements": ["Skill1"],
+  "location": "Test Location",
+  "salary": "5 LPA",
+  "deadline": "2020-01-01T00:00:00.000Z"
+}
+
+### Test Missing Required Fields
+POST {{baseUrl}}/jobs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Test Job"
+}
+
+###############################################
+# AUTHORIZATION TESTS
+###############################################
+
+### Test Student Accessing Admin Route
+GET {{baseUrl}}/students
+Authorization: Bearer {{token}}
+
+### Test Unauthorized Access (No Token)
+GET {{baseUrl}}/students/me
+
+### Test Company Updating Other Company's Job
+PUT {{baseUrl}}/jobs/{{jobId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Unauthorized Update"
+}
