@@ -17,15 +17,19 @@ const JobSchema = new mongoose.Schema({
     },
     requirements: {
         type: [String],
-        required: [true, 'Please add requirements']
+        default: []
+    },
+    industry: {
+        type: String,
+        required: [true, 'Please add an industry']
     },
     location: {
         type: String,
         required: [true, 'Please add a location']
     },
-    salary: {
-        type: String,
-        required: [true, 'Please add salary package']
+    ctc: {
+        type: Number,
+        required: [true, 'Please add CTC in LPA']
     },
     deadline: {
         type: Date,

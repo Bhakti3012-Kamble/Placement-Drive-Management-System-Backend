@@ -36,7 +36,7 @@ exports.register = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/auth/login
 // @access  Public
 exports.login = asyncHandler(async (req, res, next) => {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
     // Validate email & password
     if (!email || !password) {
@@ -58,6 +58,12 @@ exports.login = asyncHandler(async (req, res, next) => {
     if (!isMatch) {
         const ErrorResponse = require('../utils/errorResponse');
         return next(new ErrorResponse('Invalid credentials', 401));
+    }
+
+    // Validate role if provided
+    if (role && user.role !== role) {
+        const ErrorResponse = require('../utils/errorResponse');
+        return next(new ErrorResponse(`This account is registered as ${user.role}, not ${role}`, 403));
     }
 
     sendTokenResponse(user, 200, res);
@@ -165,6 +171,49 @@ exports.resetPassword = asyncHandler(async (req, res, next) => {
     user.password = req.body.password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
+    await user.save();
+
+    sendTokenResponse(user, 200, res);
+});
+
+// @desc    Cleanup: Get all users
+// @route   GET /api/v1/auth/cleanup/users
+// @access  Public (Temp)
+exports.cleanupUsers = asyncHandler(async (req, res, next) => {
+    const users = await User.find({});
+    res.status(200).json({ success: true, count: users.length, data: users });
+});
+
+// @desc    Cleanup: Delete user by email
+// @route   DELETE /api/v1/auth/cleanup/users/:email
+// @access  Public (Temp)
+exports.deleteUserByEmail = asyncHandler(async (req, res, next) => {
+    const user = await User.findOne({ email: req.params.email });
+    if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Delete associated student profile if exists
+    const Student = require('../models/Student');
+    await Student.deleteOne({ user: user._id });
+
+    await user.remove();
+
+    res.status(200).json({ success: true, message: `User ${req.params.email} deleted` });
+});
+// @desc    Update password
+// @route   PUT /api/v1/auth/update-password
+// @access  Private
+exports.updatePassword = asyncHandler(async (req, res, next) => {
+    const user = await User.findById(req.user.id).select('+password');
+
+    // Check current password
+    if (!(await user.matchPassword(req.body.currentPassword))) {
+        const ErrorResponse = require('../utils/errorResponse');
+        return next(new ErrorResponse('Password incorrect', 401));
+    }
+
+    user.password = req.body.newPassword;
     await user.save();
 
     sendTokenResponse(user, 200, res);

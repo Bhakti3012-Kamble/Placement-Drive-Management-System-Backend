@@ -19,10 +19,32 @@ const StudentSchema = new mongoose.Schema({
         type: Number,
         required: [true, 'Please add CGPA']
     },
+    university: {
+        type: String,
+        required: [true, 'Please add a university']
+    },
+    graduationYear: {
+        type: Number,
+        required: [true, 'Please add a graduation year']
+    },
+    semester: {
+        type: Number,
+        required: [true, 'Please add a semester']
+    },
+    phone: String,
+    dob: Date,
     skills: [String],
     resume: {
         type: String,
         default: 'no-resume.pdf'
+    },
+    profilePic: {
+        type: String,
+        default: 'no-photo.jpg'
+    },
+    transcript: {
+        type: String,
+        default: 'no-transcript.pdf'
     },
     applications: [
         {
@@ -38,9 +60,36 @@ const StudentSchema = new mongoose.Schema({
             appliedAt: {
                 type: Date,
                 default: Date.now
+            },
+            interviewDate: {
+                type: Date
+            },
+            interviewRound: {
+                type: String
             }
         }
     ],
+    notificationPreferences: {
+        jobDrives: {
+            email: { type: Boolean, default: true },
+            sms: { type: Boolean, default: false },
+            inApp: { type: Boolean, default: true }
+        },
+        statusChanges: {
+            email: { type: Boolean, default: true },
+            sms: { type: Boolean, default: true },
+            inApp: { type: Boolean, default: true }
+        },
+        interviewReminders: {
+            email: { type: Boolean, default: true },
+            sms: { type: Boolean, default: true },
+            inApp: { type: Boolean, default: true }
+        }
+    },
+    privacySettings: {
+        visibleToRecruiters: { type: Boolean, default: true },
+        showPlacementStatus: { type: Boolean, default: false }
+    },
     createdAt: {
         type: Date,
         default: Date.now

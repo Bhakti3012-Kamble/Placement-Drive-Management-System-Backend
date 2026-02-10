@@ -5,7 +5,8 @@ const {
     createJob,
     getJobApplications,
     updateJob,
-    deleteJob
+    deleteJob,
+    getRecruiterStats
 } = require('../controllers/jobs');
 const { jobValidation } = require('../validators/job');
 const validate = require('../middleware/validate');
@@ -17,6 +18,9 @@ const { protect, authorize } = require('../middleware/auth');
 router.route('/')
     .get(getJobs)
     .post(protect, authorize('company', 'admin'), jobValidation, validate, createJob);
+
+// Specific routes must come before parameterized routes
+router.get('/stats', protect, authorize('company', 'admin'), getRecruiterStats);
 
 router.route('/:id')
     .get(getJob)

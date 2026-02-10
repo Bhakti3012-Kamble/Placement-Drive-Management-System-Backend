@@ -8,6 +8,7 @@ const connectDB = require('./config/db');
 const auth = require('./routes/auth');
 const students = require('./routes/students');
 const jobs = require('./routes/jobs');
+const admin = require('./routes/admin');
 const errorHandler = require('./middleware/error');
 
 // Load env vars
@@ -32,14 +33,18 @@ if (process.env.NODE_ENV === 'development') {
     app.use(morgan('dev'));
 }
 
-// Enable CORS
-app.use(cors());
+// Enable CORS with credentials support
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    credentials: true
+}));
 
 // Mount routers
 app.use('/api/v1/auth', auth);
 console.log("Auth mounted");
 app.use('/api/v1/students', students);
 app.use('/api/v1/jobs', jobs);
+app.use('/api/v1/admin', admin);
 
 // Basic route
 app.get('/', (req, res) => {

@@ -1,5 +1,6 @@
 const Job = require('../models/Job');
 const Student = require('../models/Student');
+const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
 
@@ -14,25 +15,59 @@ exports.getJobs = asyncHandler(async (req, res, next) => {
 
     // Fields to exclude
     const removeFields = ['select', 'sort', 'page', 'limit', 'search'];
-
-    // Loop over removeFields and delete them from reqQuery
     removeFields.forEach(param => delete reqQuery[param]);
 
-    // Create query string
-    let queryStr = JSON.stringify(reqQuery);
+    // Build query object explicitly
+    const queryObj = {};
 
-    // Create operators ($gt, $gte, etc)
-    queryStr = queryStr.replace(/\b(gt|gte|lt|lte|in)\b/g, match => `$${match}`);
+    // Handle CTC filters
+    if (reqQuery.ctc) {
+        queryObj.ctc = {};
+        if (reqQuery.ctc.gte) queryObj.ctc.$gte = Number(reqQuery.ctc.gte);
+        if (reqQuery.ctc.gt) queryObj.ctc.$gt = Number(reqQuery.ctc.gt);
+        if (reqQuery.ctc.lte) queryObj.ctc.$lte = Number(reqQuery.ctc.lte);
+        if (reqQuery.ctc.lt) queryObj.ctc.$lt = Number(reqQuery.ctc.lt);
+    }
+
+    // Handle Industry filter (support both single string and array/in)
+    if (reqQuery.industry) {
+        if (typeof reqQuery.industry === 'object' && reqQuery.industry.in) {
+            const industries = typeof reqQuery.industry.in === 'string'
+                ? reqQuery.industry.in.split(',')
+                : reqQuery.industry.in;
+            queryObj.industry = { $in: industries };
+        } else if (typeof reqQuery.industry === 'string') {
+            queryObj.industry = reqQuery.industry;
+        }
+    }
+
+    // Handle Location filter
+    if (reqQuery.location) {
+        queryObj.location = { $regex: reqQuery.location, $options: 'i' };
+    }
+
+    // Handle Type filter
+    if (reqQuery.type) {
+        queryObj.type = reqQuery.type;
+    }
 
     // Finding resource
-    query = Job.find(JSON.parse(queryStr)).populate('company', 'name email');
+    query = Job.find(queryObj).populate('company', 'name email');
 
     // Search by keyword
     if (req.query.search) {
+        // Find matching companies first
+        const matchedUsers = await User.find({
+            name: { $regex: req.query.search, $options: 'i' },
+            role: 'company'
+        });
+        const companyIds = matchedUsers.map(u => u._id);
+
         query = query.find({
             $or: [
                 { title: { $regex: req.query.search, $options: 'i' } },
-                { description: { $regex: req.query.search, $options: 'i' } }
+                { description: { $regex: req.query.search, $options: 'i' } },
+                { company: { $in: companyIds } }
             ]
         });
     }
@@ -83,6 +118,7 @@ exports.getJobs = asyncHandler(async (req, res, next) => {
     res.status(200).json({
         success: true,
         count: jobs.length,
+        total,
         pagination,
         data: jobs
     });
@@ -145,6 +181,43 @@ exports.getJobApplications = asyncHandler(async (req, res, next) => {
         success: true,
         count: applications.length,
         data: applications
+    });
+});
+
+// @desc    Get recruiter stats (active jobs, total applicants, shortlisted)
+// @route   GET /api/v1/jobs/stats
+// @access  Private/Company/Admin
+exports.getRecruiterStats = asyncHandler(async (req, res, next) => {
+    const jobs = await Job.find({ company: req.user.id });
+    const jobIds = jobs.map(job => job._id);
+
+    const activeJobs = jobs.filter(job => job.status === 'open').length;
+
+    const students = await Student.find({
+        'applications.job': { $in: jobIds }
+    });
+
+    let totalApplicants = 0;
+    let shortlistedCount = 0;
+
+    students.forEach(student => {
+        student.applications.forEach(app => {
+            if (jobIds.some(id => id.equals(app.job))) {
+                totalApplicants++;
+                if (app.status === 'shortlisted' || app.status === 'accepted') {
+                    shortlistedCount++;
+                }
+            }
+        });
+    });
+
+    res.status(200).json({
+        success: true,
+        data: {
+            activeJobs,
+            totalApplicants,
+            shortlistedCount
+        }
     });
 });
 

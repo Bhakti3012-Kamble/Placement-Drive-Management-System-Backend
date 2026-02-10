@@ -17,8 +17,14 @@ exports.jobValidation = [
         .withMessage('Job description must be at least 10 characters'),
 
     body('requirements')
-        .isArray({ min: 1 })
-        .withMessage('At least one requirement is needed'),
+        .optional()
+        .isArray()
+        .withMessage('Requirements must be an array'),
+
+    body('industry')
+        .trim()
+        .notEmpty()
+        .withMessage('Industry is required'),
 
     body('location')
         .trim()
@@ -27,10 +33,23 @@ exports.jobValidation = [
         .isLength({ min: 2, max: 100 })
         .withMessage('Location must be between 2 and 100 characters'),
 
-    body('salary')
-        .trim()
+    body('ctc')
         .notEmpty()
-        .withMessage('Salary is required'),
+        .withMessage('CTC is required')
+        .isNumeric()
+        .withMessage('CTC must be a number')
+        .isFloat({ min: 0 })
+        .withMessage('CTC must be a positive number'),
+
+    body('type')
+        .optional()
+        .trim()
+        .isIn(['Full-time', 'Part-time', 'Internship', 'Contract'])
+        .withMessage('Job type must be Full-time, Part-time, Internship, or Contract'),
+
+    body('experienceLevel')
+        .optional()
+        .trim(),
 
     body('deadline')
         .notEmpty()
