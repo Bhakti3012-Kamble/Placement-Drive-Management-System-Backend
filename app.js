@@ -35,7 +35,7 @@ if (process.env.NODE_ENV === 'development') {
 
 // Enable CORS with credentials support
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'https://pdmsys.netlify.app'],
     credentials: true
 }));
 
