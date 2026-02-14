@@ -184,6 +184,55 @@ exports.getJobApplications = asyncHandler(async (req, res, next) => {
     });
 });
 
+// @desc    Get all applications for a company (across all jobs)
+// @route   GET /api/v1/jobs/applications/all
+// @access  Private/Company/Admin
+exports.getCompanyApplications = asyncHandler(async (req, res, next) => {
+    // 1. Get all jobs for this company
+    const jobs = await Job.find({ company: req.user.id });
+    const jobIds = jobs.map(job => job._id);
+
+    // 2. Find students who applied to ANY of these jobs
+    const students = await Student.find({
+        'applications.job': { $in: jobIds }
+    }).populate('user', 'name email');
+
+    // 3. Flatten applications
+    let allApplications = [];
+
+    students.forEach(student => {
+        student.applications.forEach(app => {
+            // Check if this application belongs to one of the company's jobs
+            const job = jobs.find(j => j._id.equals(app.job));
+
+            if (job) {
+                allApplications.push({
+                    _id: app._id, // Application ID (if needed)
+                    studentId: student._id,
+                    jobId: job._id,
+                    jobTitle: job.title,
+                    name: student?.user?.name || 'Unknown',
+                    email: student?.user?.email || 'Unknown',
+                    cgpa: student.cgpa,
+                    resume: student.resume,
+                    status: app.status,
+                    appliedAt: app.appliedAt
+                });
+            }
+        });
+    });
+
+    // Optional: Sort by appliedAt desc
+    allApplications.sort((a, b) => new Date(b.appliedAt) - new Date(a.appliedAt));
+
+    res.status(200).json({
+        success: true,
+        count: allApplications.length,
+        data: allApplications
+    });
+});
+
+
 // @desc    Get recruiter stats (active jobs, total applicants, shortlisted)
 // @route   GET /api/v1/jobs/stats
 // @access  Private/Company/Admin
@@ -199,14 +248,16 @@ exports.getRecruiterStats = asyncHandler(async (req, res, next) => {
 
     let totalApplicants = 0;
     let shortlistedCount = 0;
+    let acceptedCount = 0;
+    let rejectedCount = 0;
 
     students.forEach(student => {
         student.applications.forEach(app => {
             if (jobIds.some(id => id.equals(app.job))) {
                 totalApplicants++;
-                if (app.status === 'shortlisted' || app.status === 'accepted') {
-                    shortlistedCount++;
-                }
+                if (app.status === 'shortlisted') shortlistedCount++;
+                if (app.status === 'accepted') acceptedCount++;
+                if (app.status === 'rejected') rejectedCount++;
             }
         });
     });
@@ -215,8 +266,11 @@ exports.getRecruiterStats = asyncHandler(async (req, res, next) => {
         success: true,
         data: {
             activeJobs,
+            totalJobs: jobs.length,
             totalApplicants,
-            shortlistedCount
+            shortlistedCount,
+            acceptedCount,
+            rejectedCount
         }
     });
 });
