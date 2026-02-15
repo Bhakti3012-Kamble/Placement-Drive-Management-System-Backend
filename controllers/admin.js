@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Job = require('../models/Job');
 const Student = require('../models/Student');
+const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 
 // @desc    Get admin stats
@@ -184,6 +185,16 @@ exports.deleteUser = asyncHandler(async (req, res, next) => {
 
     await user.deleteOne();
 
+    // Log the action
+    const Log = require('../models/Log');
+    await Log.create({
+        user: req.user.email,
+        action: 'DELETE_USER',
+        ip: req.ip,
+        status: 'WARNING',
+        details: { deletedUserEmail: user.email, deletedUserId: user._id }
+    });
+
     res.status(200).json({
         success: true,
         data: {}
@@ -194,19 +205,35 @@ exports.deleteUser = asyncHandler(async (req, res, next) => {
 // @route   GET /api/v1/admin/companies
 // @access  Private/Admin
 exports.getAllCompanies = asyncHandler(async (req, res, next) => {
-    const companies = await User.find({ role: 'company' }).select('name email createdAt');
+    const { search } = req.query;
+    let query = {};
+
+    if (search) {
+        query = {
+            $or: [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } }
+            ]
+        };
+    }
+
+    const companies = await require('../models/Company').find(query).sort('-createdAt');
 
     const companyData = await Promise.all(companies.map(async (company) => {
-        const jobCount = await Job.countDocuments({ company: company._id });
-        const activeJobCount = await Job.countDocuments({ company: company._id, status: 'open' });
+        const jobCount = await Job.countDocuments({ company: company.linkedUser }); // Assuming jobs are linked to user ID
+        const activeJobCount = await Job.countDocuments({ company: company.linkedUser, status: 'open' });
 
         return {
-            _id: company._id,
+            _id: company._id, // Company Profile ID
+            userId: company.linkedUser,
             name: company.name,
             email: company.email,
             createdAt: company.createdAt,
             totalJobs: jobCount,
-            activeJobs: activeJobCount
+            activeJobs: activeJobCount,
+            isVerified: company.isVerified,
+            status: company.status,
+            logo: company.logo
         };
     }));
 
@@ -217,21 +244,133 @@ exports.getAllCompanies = asyncHandler(async (req, res, next) => {
     });
 });
 
-// @desc    Get system access logs (Mocked)
-// @route   GET /api/v1/admin/logs
+// @desc    Verify/Unverify Company
+// @route   PUT /api/v1/admin/companies/:id/verify
 // @access  Private/Admin
-exports.getAccessLogs = asyncHandler(async (req, res, next) => {
-    // In a real app, this would query a Logs collection
-    const mockLogs = [
-        { id: 1, event: 'User Login', user: 'admin@pdms.com', ip: '192.168.1.1', time: new Date(Date.now() - 5000000).toISOString(), status: 'SUCCESS' },
-        { id: 2, event: 'Bulk Shortlist', user: 'recruiter@google.com', ip: '10.0.0.5', time: new Date(Date.now() - 15000000).toISOString(), status: 'SUCCESS' },
-        { id: 3, event: 'Job Posting', user: 'recruiter@microsoft.com', ip: '172.16.0.2', time: new Date(Date.now() - 25000000).toISOString(), status: 'SUCCESS' },
-        { id: 4, event: 'Password Reset Request', user: 'student@mit.edu', ip: '45.12.33.1', time: new Date(Date.now() - 35000000).toISOString(), status: 'WARNING' },
-        { id: 5, event: 'System Config Update', user: 'admin@pdms.com', ip: '192.168.1.1', time: new Date(Date.now() - 45000000).toISOString(), status: 'CRITICAL' },
-    ];
+exports.verifyCompany = asyncHandler(async (req, res, next) => {
+    const Company = require('../models/Company');
+    const company = await Company.findById(req.params.id);
+
+    if (!company) {
+        return next(new ErrorResponse(`Company not found with id of ${req.params.id}`, 404));
+    }
+
+    company.isVerified = !company.isVerified;
+    if (company.isVerified) {
+        company.verifiedAt = Date.now();
+    } else {
+        company.verifiedAt = undefined;
+    }
+
+    await company.save();
+
+    // Log the action
+    await Log.create({
+        user: req.user.email,
+        action: company.isVerified ? 'VERIFY_COMPANY' : 'UNVERIFY_COMPANY',
+        ip: req.ip,
+        status: 'SUCCESS',
+        details: { companyName: company.name, companyId: company._id }
+    });
 
     res.status(200).json({
         success: true,
-        data: mockLogs
+        data: company
+    });
+});
+
+// @desc    Get all jobs for moderation
+// @route   GET /api/v1/admin/jobs
+// @access  Private/Admin
+exports.getAllJobs = asyncHandler(async (req, res, next) => {
+    const jobs = await Job.find()
+        .populate({
+            path: 'company',
+            select: 'name email role',
+            populate: {
+                path: '_id', // This is tricky because Job.company ref is User, but we might want Company details. 
+                // However, User has name/email. Let's stick to User for now or look up Company if needed.
+                // Actually, let's just populate the User details.
+            }
+        })
+        .sort('-createdAt');
+
+    // To get Company Profile details (like logo/proper name if different), we might need manual lookup if User doesn't have it all.
+    // For now, let's assume User data is sufficient for moderation list.
+
+    res.status(200).json({
+        success: true,
+        count: jobs.length,
+        data: jobs
+    });
+});
+
+// @desc    Update Job Status (Close/Open)
+// @route   PUT /api/v1/admin/jobs/:id/status
+// @access  Private/Admin
+exports.updateJobStatus = asyncHandler(async (req, res, next) => {
+    const job = await Job.findById(req.params.id);
+
+    if (!job) {
+        return next(new ErrorResponse(`Job not found with id of ${req.params.id}`, 404));
+    }
+
+    // Admins can force close/open
+    job.status = req.body.status;
+    await job.save();
+
+    res.status(200).json({
+        success: true,
+        data: job
+    });
+});
+
+exports.updateUser = asyncHandler(async (req, res, next) => {
+    const User = require('../models/User');
+    let user = await User.findById(req.params.id);
+
+    if (!user) {
+        return next(new ErrorResponse(`User not found with id of ${req.params.id}`, 404));
+    }
+
+    // Prevent updating the email to one that already exists (if email is being changed)
+    if (req.body.email && req.body.email !== user.email) {
+        const emailExists = await User.findOne({ email: req.body.email });
+        if (emailExists) {
+            return next(new ErrorResponse('Email already in use', 400));
+        }
+    }
+
+    user = await User.findByIdAndUpdate(req.params.id, req.body, {
+        new: true,
+        runValidators: true
+    });
+
+    res.status(200).json({
+        success: true,
+        data: user
+    });
+});
+
+const Log = require('../models/Log');
+
+// @desc    Get system access logs
+// @route   GET /api/v1/admin/logs
+// @access  Private/Admin
+exports.getAccessLogs = asyncHandler(async (req, res, next) => {
+    const logs = await Log.find().sort('-createdAt').limit(50);
+
+    res.status(200).json({
+        success: true,
+        count: logs.length,
+        data: logs.map(log => ({
+            id: log._id,
+            event: log.action,
+            user: log.user,
+            ip: log.ip,
+            time: log.createdAt,
+            status: log.status,
+            details: log.details
+        }))
     });
 });

@@ -66,6 +66,16 @@ exports.login = asyncHandler(async (req, res, next) => {
         return next(new ErrorResponse(`This account is registered as ${user.role}, not ${role}`, 403));
     }
 
+    // Log successful login
+    const Log = require('../models/Log');
+    await Log.create({
+        user: user.email,
+        action: 'LOGIN',
+        ip: req.ip,
+        status: 'SUCCESS',
+        details: { role: user.role }
+    });
+
     sendTokenResponse(user, 200, res);
 });
 

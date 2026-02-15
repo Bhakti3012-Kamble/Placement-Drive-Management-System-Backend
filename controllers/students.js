@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const Student = require('../models/Student');
 const User = require('../models/User');
 const sendEmail = require('../utils/sendEmail');
@@ -132,9 +133,15 @@ exports.uploadDocuments = asyncHandler(async (req, res, next) => {
             // Create custom filename
             file.name = `${key}_${student._id}${path.parse(file.name).ext}`;
 
+            // Create upload directory if it doesn't exist
+            const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+
             // Move file
             await new Promise((resolve, reject) => {
-                file.mv(`./public/uploads/${file.name}`, err => {
+                file.mv(path.join(uploadDir, file.name), err => {
                     if (err) reject(err);
                     else resolve();
                 });
